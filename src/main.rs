@@ -14,16 +14,9 @@ struct CliArgs {
     #[arg(short, long, conflicts_with_all=["count"], help="Show all commits")]
     all: bool,
     #[arg(short, long, value_enum, conflicts_with_all=["count"], help="Show only commits with the given rarity")]
-    only: Option<HashRarity>,
+    only: Option<RarityTier>,
     #[arg(short, long, help = "Show commit count")]
     count: bool,
-}
-
-#[derive(Tabled, Display, Clone, PartialEq, Eq, ValueEnum)]
-enum HashRarity {
-    Common,
-    Uncommon,
-    Rare,
 }
 
 #[derive(Tabled)]
@@ -38,6 +31,23 @@ struct Count {
     rare: usize,
 }
 
+#[derive(Tabled, Clone, PartialEq)]
+struct Rarity {
+    #[tabled(rename = "Explanation")]
+    explanation: String,
+    #[tabled(rename = "Percentage")]
+    percentage: f64,
+    #[tabled(rename = "Tier")]
+    tier: RarityTier,
+}
+
+#[derive(Tabled, Display, Clone, PartialEq, ValueEnum)]
+enum RarityTier {
+    Common,
+    Uncommon,
+    Rare,
+}
+
 #[derive(Tabled, Clone)]
 struct Commit {
     #[tabled(rename = "Author")]
@@ -46,8 +56,8 @@ struct Commit {
     datetime: DateTime<FixedOffset>,
     #[tabled(rename = "Hash")]
     hash: String,
-    #[tabled(rename = "Rarity")]
-    rarity: HashRarity,
+    #[tabled(inline)]
+    rarity: Rarity,
 }
 
 impl Commit {
@@ -60,22 +70,102 @@ impl Commit {
         }
     }
 
-    fn get_rarity(hash: &str) -> HashRarity {
-        if Self::is_rare(hash) {
-            HashRarity::Rare
-        } else if Self::is_uncommon(hash) {
-            HashRarity::Uncommon
-        } else {
-            HashRarity::Common
+    fn get_rarity(hash: &str) -> Rarity {
+        match hash {
+            _ if UncommonExpl::is_starts_nine_digits(hash) => Rarity {
+                tier: RarityTier::Uncommon,
+                percentage: 0.01,
+                explanation: UncommonExpl::StartsNineDigits.to_string(),
+            },
+            _ if UncommonExpl::is_ends_nine_digits(hash) => Rarity {
+                tier: RarityTier::Uncommon,
+                percentage: 0.01,
+                explanation: UncommonExpl::EndsNineDigits.to_string(),
+            },
+            _ if UncommonExpl::is_contains_nine_continuous_digits(hash) => Rarity {
+                tier: RarityTier::Uncommon,
+                percentage: 0.01,
+                explanation: UncommonExpl::ContainsNineContDigits.to_string(),
+            },
+            _ if RareExpl::is_starts_nine_letters(hash) => Rarity {
+                tier: RarityTier::Rare,
+                percentage: 0.001,
+                explanation: RareExpl::StartsNineLetters.to_string(),
+            },
+            _ if RareExpl::is_ends_nine_letters(hash) => Rarity {
+                tier: RarityTier::Rare,
+                percentage: 0.001,
+                explanation: RareExpl::EndsNineLetters.to_string(),
+            },
+            _ if RareExpl::is_contains_nine_continuous_letters(hash) => Rarity {
+                tier: RarityTier::Rare,
+                percentage: 0.001,
+                explanation: RareExpl::ContainsNineContLetters.to_string(),
+            },
+            _ => Rarity {
+                tier: RarityTier::Common,
+                percentage: 0.99,
+                explanation: String::from(""),
+            },
         }
     }
+}
 
-    fn is_uncommon(hash: &str) -> bool {
+enum UncommonExpl {
+    StartsNineDigits,
+    EndsNineDigits,
+    ContainsNineContDigits,
+}
+
+impl ToString for UncommonExpl {
+    fn to_string(&self) -> String {
+        match self {
+            Self::StartsNineDigits => String::from("Starts with nine digits"),
+            Self::EndsNineDigits => String::from("Ends with nine digits"),
+            Self::ContainsNineContDigits => String::from("Contains nine continuous digits"),
+        }
+    }
+}
+
+impl UncommonExpl {
+    fn is_starts_nine_digits(hash: &str) -> bool {
         hash.chars().take(9).all(|c| c.is_ascii_digit())
     }
 
-    fn is_rare(hash: &str) -> bool {
-        hash.chars().take(9).all(|c| !c.is_ascii_digit())
+    fn is_ends_nine_digits(hash: &str) -> bool {
+        hash.chars().rev().take(9).all(|c| c.is_ascii_digit())
+    }
+
+    fn is_contains_nine_continuous_digits(hash: &str) -> bool {
+        hash.chars().collect::<String>().contains("999999999")
+    }
+}
+
+enum RareExpl {
+    StartsNineLetters,
+    EndsNineLetters,
+    ContainsNineContLetters,
+}
+
+impl ToString for RareExpl {
+    fn to_string(&self) -> String {
+        match self {
+            Self::StartsNineLetters => String::from("Starts with nine letters"),
+            Self::EndsNineLetters => String::from("Ends with nine letters"),
+            Self::ContainsNineContLetters => String::from("Contains nine continuous letters"),
+        }
+    }
+}
+
+impl RareExpl {
+    fn is_starts_nine_letters(hash: &str) -> bool {
+        hash.chars().take(9).all(|c| c.is_ascii_alphabetic())
+    }
+    fn is_ends_nine_letters(hash: &str) -> bool {
+        hash.chars().rev().take(9).all(|c| c.is_ascii_alphabetic())
+    }
+    fn is_contains_nine_continuous_letters(hash: &str) -> bool {
+        hash.chars().collect::<String>().contains("abcdefghi")
     }
 }
 
@@ -119,7 +209,7 @@ fn main() -> Result<()> {
     } else if let Some(only) = args.only {
         let only_commits = commits
             .par_iter()
-            .filter(|c| c.rarity == only)
+            .filter(|c| c.rarity.tier == only)
             .cloned()
             .collect::<Vec<Commit>>();
         if only_commits.is_empty() {
@@ -132,22 +222,22 @@ fn main() -> Result<()> {
             total: commits.len(),
             common: commits
                 .par_iter()
-                .filter(|c| c.rarity == HashRarity::Common)
+                .filter(|c| c.rarity.tier == RarityTier::Common)
                 .count(),
             uncommon: commits
                 .par_iter()
-                .filter(|c| c.rarity == HashRarity::Uncommon)
+                .filter(|c| c.rarity.tier == RarityTier::Uncommon)
                 .count(),
             rare: commits
                 .par_iter()
-                .filter(|c| c.rarity == HashRarity::Rare)
+                .filter(|c| c.rarity.tier == RarityTier::Rare)
                 .count(),
         };
         return print_table(&vec![count]);
     } else {
         let not_common_commits = commits
             .par_iter()
-            .filter(|c| c.rarity != HashRarity::Common)
+            .filter(|c| c.rarity.tier != RarityTier::Common)
             .cloned()
             .collect::<Vec<Commit>>();
 
