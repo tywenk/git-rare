@@ -198,11 +198,16 @@ fn main() -> Result<()> {
     let args = CliArgs::parse();
     let sh = Shell::new()?;
 
+    // Get the logs in a format:
+    // Hash Date Author
+    // e83c5163316f89bfbde7d9ab23ca2e25604af290 2024-09-28T17:45:47+00:00 John Doe
     let raw_output = cmd!(sh, "git log --pretty=format:'%H %aI %an'").read()?;
     if raw_output.is_empty() {
         println!("No commits found.");
         return Ok(());
     }
+    // TODO: paginate and batch process commits.
+    // If there are hundreds of thousands of commits this may be a bottleneck.
     let commits: Vec<Commit> = raw_output.par_lines().filter_map(parse_commit).collect();
 
     if args.all && args.only.is_none() {
