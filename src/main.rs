@@ -1,5 +1,6 @@
 use std::fmt::{Display, Error, Formatter};
 use std::string::ToString;
+use std::time::Instant;
 
 use anyhow::Result;
 use chrono::{DateTime, FixedOffset};
@@ -184,17 +185,20 @@ fn parse_commit(line: &str) -> Option<Commit> {
     }
 }
 
-fn print_table<T>(commits: &Vec<T>) -> Result<()>
+fn print_table<T>(commits: &Vec<T>, start_time: Instant) -> Result<()>
 where
     T: Tabled,
 {
     let mut table = Table::new(commits);
     table.with(Style::rounded());
     println!("{table}");
+    let duration = start_time.elapsed();
+    println!("This operation took {:?}", duration);
     Ok(())
 }
 
 fn main() -> Result<()> {
+    let start_time = Instant::now();
     let args = CliArgs::parse();
     let sh = Shell::new()?;
 
@@ -211,7 +215,7 @@ fn main() -> Result<()> {
     let commits: Vec<Commit> = raw_output.par_lines().filter_map(parse_commit).collect();
 
     if args.all && args.only.is_none() {
-        print_table(&commits)
+        print_table(&commits, start_time)
     } else if let Some(only) = args.only {
         let only_commits = commits
             .par_iter()
@@ -222,7 +226,7 @@ fn main() -> Result<()> {
             println!("No {} commits found.", only);
             return Ok(());
         }
-        return print_table(&only_commits);
+        return print_table(&only_commits, start_time);
     } else if args.count {
         let count = Count {
             total: commits.len(),
@@ -239,7 +243,7 @@ fn main() -> Result<()> {
                 .filter(|c| c.rarity.tier == RarityTier::Rare)
                 .count(),
         };
-        return print_table(&vec![count]);
+        return print_table(&vec![count], start_time);
     } else {
         let not_common_commits = commits
             .par_iter()
@@ -251,7 +255,7 @@ fn main() -> Result<()> {
             println!("No uncommon or rare commits found.");
             return Ok(());
         }
-        return print_table(&not_common_commits);
+        return print_table(&not_common_commits, start_time);
     }
 }
 
