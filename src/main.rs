@@ -1,3 +1,4 @@
+use std::fmt::{Display, Error, Formatter};
 use std::string::ToString;
 
 use anyhow::Result;
@@ -117,12 +118,12 @@ enum UncommonExpl {
     ContainsNineContDigits,
 }
 
-impl ToString for UncommonExpl {
-    fn to_string(&self) -> String {
+impl Display for UncommonExpl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         match self {
-            Self::StartsNineDigits => String::from("Starts with nine digits"),
-            Self::EndsNineDigits => String::from("Ends with nine digits"),
-            Self::ContainsNineContDigits => String::from("Contains nine continuous digits"),
+            Self::StartsNineDigits => write!(f, "Starts with nine digits"),
+            Self::EndsNineDigits => write!(f, "Ends with nine digits"),
+            Self::ContainsNineContDigits => write!(f, "Contains nine continuous digits"),
         }
     }
 }
@@ -147,12 +148,12 @@ enum RareExpl {
     ContainsNineContLetters,
 }
 
-impl ToString for RareExpl {
-    fn to_string(&self) -> String {
+impl Display for RareExpl {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), Error> {
         match self {
-            Self::StartsNineLetters => String::from("Starts with nine letters"),
-            Self::EndsNineLetters => String::from("Ends with nine letters"),
-            Self::ContainsNineContLetters => String::from("Contains nine continuous letters"),
+            Self::StartsNineLetters => write!(f, "Starts with nine letters"),
+            Self::EndsNineLetters => write!(f, "Ends with nine letters"),
+            Self::ContainsNineContLetters => write!(f, "Contains nine continuous letters"),
         }
     }
 }
